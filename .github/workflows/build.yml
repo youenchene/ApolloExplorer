@@ -42,6 +42,14 @@ jobs:
         # signing (identity "-") is required regardless, since arm64 refuses to
         # run any unsigned Mach-O binary at all. Users must still right-click ->
         # Open (or `xattr -cr`) the first time because of the quarantine flag.
+        #
+        # TODO: real signing/notarization, deferred for now. build_macos_client.sh
+        # does this locally with an Apple Developer Team ID (${APPLETEAMID}) via
+        # `codesign --sign ${APPLETEAMID}` + `macdeployqt -sign-for-notarization=`
+        # + `xcrun notarytool`. To wire this into CI: add the Developer ID cert
+        # (base64 .p12) and APPLETEAMID as repo secrets, import the cert into a
+        # temporary keychain, sign with it instead of "-", then notarize + staple
+        # before packaging.
         run: |
           codesign --force --deep --sign - ApolloExplorerPC/ApolloExplorer.app
           codesign --force --sign - acp/acp
