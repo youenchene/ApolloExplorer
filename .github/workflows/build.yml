@@ -185,7 +185,11 @@ jobs:
           # ndk:        generates NDK3.2 proto/clib/inline/lvo headers into ndk-include/
           # netinclude: merges <proto/bsdsocket.h> (Roadshow/AmiTCP) into ndk-include/
           # libamiga:   installs the prebuilt libamiga.a needed by -lamiga
-          make min ndk netinclude libamiga NDK=3.2 PREFIX=/opt/amiga -j"$(nproc)"
+          #
+          # No -j here: parallel jobs race on generating libnix's
+          # export-libnix4.c (duplicate stub entries -> redefinition errors).
+          # Serial is slower but this only runs once thanks to actions/cache.
+          make min ndk netinclude libamiga NDK=3.2 PREFIX=/opt/amiga
 
       - name: Bridge NDK includes to the ApolloCrossDev layout
         # Amiga/Makefile (the WDrijver/ApolloCrossDev toolchain convention) expects
