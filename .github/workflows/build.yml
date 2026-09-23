@@ -177,7 +177,8 @@ jobs:
       - name: Build m68k-amigaos-gcc toolchain (bebbo/amiga-gcc)
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 https://github.com/bebbo/amiga-gcc /tmp/amiga-gcc
+          # bebbo/amiga-gcc migrated off GitHub; Codeberg is its current home.
+          git clone --depth 1 https://codeberg.org/bebbo/amiga-gcc /tmp/amiga-gcc
           cd /tmp/amiga-gcc
           make update
           # min:        m68k-amigaos-gcc + binutils + libnix runtime + sys-include
