@@ -107,6 +107,13 @@ jobs:
   windows:
     name: Windows (x86_64)
     runs-on: windows-latest
+    env:
+      # aqtinstall cannot resolve any 6.11.x version for Windows targets: Qt
+      # restructured its Windows repo layout starting at 6.11.0 (added an
+      # arm64 cross-compile variant folder), which breaks Updates.xml
+      # resolution upstream in aqtinstall. Pin to the last known-good release
+      # here instead of env.QT_VERSION until aqtinstall ships a fix.
+      QT_VERSION: "6.10.1"
     steps:
       - uses: actions/checkout@v4
 
