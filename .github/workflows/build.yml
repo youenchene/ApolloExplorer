@@ -205,7 +205,9 @@ jobs:
       - name: Build
         run: |
           export PATH="/opt/amiga/bin:$PATH"
-          make -C Amiga PREFIX=/opt/amiga
+          # Amiga/Makefile's first (default) target is just the server binary;
+          # `all` is required to also build ApolloExplorerTool.
+          make -C Amiga PREFIX=/opt/amiga all
 
       - name: Package
         run: |
