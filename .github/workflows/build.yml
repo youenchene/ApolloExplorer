@@ -1,0 +1,152 @@
+name: Build clients
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  QT_VERSION: "6.11.1"
+
+jobs:
+  macos:
+    name: macOS (universal x86_64 + arm64)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          target: desktop
+          cache: true
+
+      - name: Build
+        run: |
+          qmake -recursive QMAKE_APPLE_DEVICE_ARCHS="x86_64 arm64" MACOSX_DEPLOYMENT_TARGET="12.7.6"
+          make -j"$(sysctl -n hw.ncpu)"
+
+      - name: Bundle app icon
+        run: |
+          mkdir -p ApolloExplorerPC/ApolloExplorer.app/Contents/Resources/
+          cp ApolloExplorerPC/icons/ApolloExplorer.icns ApolloExplorerPC/ApolloExplorer.app/Contents/Resources/
+
+      - name: Deploy Qt frameworks
+        run: macdeployqt ApolloExplorerPC/ApolloExplorer.app -verbose=1
+
+      - name: Ad-hoc code sign
+        # Unsigned/unnotarized: no Apple Developer ID is available in CI. Ad-hoc
+        # signing (identity "-") is required regardless, since arm64 refuses to
+        # run any unsigned Mach-O binary at all. Users must still right-click ->
+        # Open (or `xattr -cr`) the first time because of the quarantine flag.
+        run: |
+          codesign --force --deep --sign - ApolloExplorerPC/ApolloExplorer.app
+          codesign --force --sign - acp/acp
+          codesign --force --sign - ash/ash
+
+      - name: Package
+        run: |
+          mkdir -p ApolloExplorer-macOS
+          mv ApolloExplorerPC/ApolloExplorer.app ApolloExplorer-macOS/
+          mv acp/acp ApolloExplorer-macOS/
+          mv ash/ash ApolloExplorer-macOS/
+          ditto -c -k --sequesterRsrc --keepParent ApolloExplorer-macOS ApolloExplorer-macOS-universal.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ApolloExplorer-macOS-universal
+          path: ApolloExplorer-macOS-universal.zip
+
+  linux:
+    name: Linux (x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          target: desktop
+          install-deps: true
+          cache: true
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+
+      - name: Build
+        run: |
+          qmake -recursive
+          make -j"$(nproc)"
+
+      - name: Package
+        run: |
+          mkdir -p ApolloExplorer-Linux
+          mv ApolloExplorerPC/ApolloExplorer ApolloExplorer-Linux/ApolloExplorer
+          cp ApolloExplorerPC/ApolloExplorer.desktop ApolloExplorer-Linux/ApolloExplorer.desktop
+          mv acp/acp ApolloExplorer-Linux/acp
+          mv ash/ash ApolloExplorer-Linux/ash
+          tar -czf ApolloExplorer-Linux-x86_64.tar.gz ApolloExplorer-Linux
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ApolloExplorer-Linux-x86_64
+          path: ApolloExplorer-Linux-x86_64.tar.gz
+
+  windows:
+    name: Windows (x86_64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          target: desktop
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64
+
+      - name: Build
+        shell: cmd
+        run: |
+          qmake -recursive -config release
+          nmake
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path ApolloExplorer-Windows
+          Move-Item ApolloExplorerPC\release\ApolloExplorer.exe ApolloExplorer-Windows\ApolloExplorer.exe
+          Move-Item acp\release\acp.exe ApolloExplorer-Windows\acp.exe
+          Move-Item ash\release\ash.exe ApolloExplorer-Windows\ash.exe
+          Compress-Archive -Path ApolloExplorer-Windows\* -DestinationPath ApolloExplorer-Windows-x86_64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ApolloExplorer-Windows-x86_64
+          path: ApolloExplorer-Windows-x86_64.zip
+
+  release:
+    name: Attach artifacts to release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [macos, linux, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
