@@ -181,15 +181,16 @@ jobs:
           git clone --depth 1 https://codeberg.org/bebbo/amiga-gcc /tmp/amiga-gcc
           cd /tmp/amiga-gcc
           make update
-          # min:        m68k-amigaos-gcc + binutils + libnix runtime + sys-include
-          # ndk:        generates NDK3.2 proto/clib/inline/lvo headers into ndk-include/
-          # netinclude: merges <proto/bsdsocket.h> (Roadshow/AmiTCP) into ndk-include/
-          # libamiga:   installs the prebuilt libamiga.a needed by -lamiga
-          #
-          # No -j here: parallel jobs race on generating libnix's
-          # export-libnix4.c (duplicate stub entries -> redefinition errors).
-          # Serial is slower but this only runs once thanks to actions/cache.
-          make min ndk netinclude libamiga NDK=3.2 PREFIX=/opt/amiga
+          # `min` (binutils gcc gprof libnix libgcc libnix4.library) fails
+          # deterministically (not a -j race - reproduces serially too):
+          # upstream's libnix4-support generator emits a duplicate
+          # __vfwprintf_total_size stub, breaking export-libnix4.c. That
+          # target builds libnix4.library, a shared-library variant of
+          # libnix that Amiga/Makefile never uses (it links -noixemul,
+          # i.e. plain static libnix) - so build min's other pieces
+          # directly and skip the broken, unneeded target.
+          # ndk/netinclude/libamiga: NDK3.2 headers + -lamiga, as before.
+          make binutils gcc gprof libnix libgcc ndk netinclude libamiga NDK=3.2 PREFIX=/opt/amiga -j"$(nproc)"
 
       - name: Bridge NDK includes to the ApolloCrossDev layout
         # Amiga/Makefile (the WDrijver/ApolloCrossDev toolchain convention) expects
