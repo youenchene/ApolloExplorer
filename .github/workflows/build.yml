@@ -139,10 +139,11 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
+          # ash is excluded on win32 in ApolloExplorer.pro (see comment there):
+          # it needs POSIX termios, which Windows doesn't have.
           New-Item -ItemType Directory -Force -Path ApolloExplorer-Windows
           Move-Item ApolloExplorerPC\release\ApolloExplorer.exe ApolloExplorer-Windows\ApolloExplorer.exe
           Move-Item acp\release\acp.exe ApolloExplorer-Windows\acp.exe
-          Move-Item ash\release\ash.exe ApolloExplorer-Windows\ash.exe
           Compress-Archive -Path ApolloExplorer-Windows\* -DestinationPath ApolloExplorer-Windows-x86_64.zip
 
       - uses: actions/upload-artifact@v4
