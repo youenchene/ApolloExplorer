@@ -5,16 +5,10 @@
 #include <QThread>
 #include <QRegularExpression>
 #include <iostream>
-#include <signal.h>
-
-#ifdef _WIN32
-#include <conio.h>
-#include <io.h>
-#else
 #include <termios.h>
 #include <unistd.h>
+#include <signal.h>
 #include <fcntl.h>
-#endif
 
 #define DEBUG 0
 #include "AEUtils.h"
@@ -25,30 +19,20 @@
 
 // ---------- terminal raw-mode helpers ----------
 
-#ifndef _WIN32
 static struct termios g_SavedTermios;
-#endif
 static bool g_RawModeActive = false;
 
 static void disableRawMode()
 {
-#ifdef _WIN32
-    g_RawModeActive = false;
-#else
     if( g_RawModeActive )
     {
         tcsetattr( STDIN_FILENO, TCSAFLUSH, &g_SavedTermios );
         g_RawModeActive = false;
     }
-#endif
 }
 
 static void enableRawMode()
 {
-#ifdef _WIN32
-    // _getch() (used for interactive input below) reads unbuffered,
-    // unechoed keystrokes directly, so there is no console mode to flip.
-#else
     tcgetattr( STDIN_FILENO, &g_SavedTermios );
     atexit( disableRawMode );
 
@@ -60,46 +44,15 @@ static void enableRawMode()
     raw.c_cc[VMIN]  = 1;
     raw.c_cc[VTIME] = 0;
     tcsetattr( STDIN_FILENO, TCSAFLUSH, &raw );
-#endif
     g_RawModeActive = true;
 }
 
 static void sigintHandler( int sig )
 {
     disableRawMode();
-#ifdef _WIN32
-    _write( _fileno( stdout ), "\r\n", 2 );
-#else
     write( STDOUT_FILENO, "\r\n", 2 );
-#endif
     signal( sig, SIG_DFL );
     raise( sig );
-}
-
-// Reads one interactive input unit from the console.
-//   >= 0 : a regular byte to process
-//   -1   : end of input (EOF)
-//   -2   : a special key already consumed (Windows arrow/function keys
-//          arrive as a two-byte sequence; the caller should ignore these)
-static int readInteractiveByte()
-{
-#ifdef _WIN32
-    int ch = _getch();
-    if( ch == EOF )
-        return -1;
-    if( ch == 0 || ch == 0xE0 )
-    {
-        // Discard the scan-code byte that follows a function/arrow key.
-        _getch();
-        return -2;
-    }
-    return ch;
-#else
-    char c;
-    if( read( STDIN_FILENO, &c, 1 ) != 1 )
-        return -1;
-    return (unsigned char)c;
-#endif
 }
 
 // ---------- host resolution helpers ----------
@@ -246,11 +199,7 @@ int main( int argc, char *argv[] )
         QString command = positional.join( " " );
         exitCode = session.execute( command );
     }
-#ifdef _WIN32
-    else if( !_isatty( _fileno( stdin ) ) )
-#else
     else if( !isatty( STDIN_FILENO ) )
-#endif
     {
         // Non-TTY (pipe/script): read lines without raw mode or tab completion
         char lineBuf[4096];
@@ -282,13 +231,9 @@ int main( int argc, char *argv[] )
 
         printPrompt();
 
-        int ic;
-        while( ( ic = readInteractiveByte() ) != -1 )
+        char c;
+        while( read( STDIN_FILENO, &c, 1 ) == 1 )
         {
-            if( ic == -2 )
-                continue;
-            char c = (char)ic;
-
             if( c == '\t' )
             {
                 bool isDoubleTab = lastWasTab;
@@ -372,17 +317,12 @@ int main( int argc, char *argv[] )
                 }
                 else if( c == 27 )
                 {
-#ifndef _WIN32
                     // ESC: swallow the rest of the escape sequence (arrow keys etc.)
                     int flags = fcntl( STDIN_FILENO, F_GETFL, 0 );
                     fcntl( STDIN_FILENO, F_SETFL, flags | O_NONBLOCK );
                     char discard[8];
                     while( read( STDIN_FILENO, discard, sizeof(discard) ) > 0 ) {}
                     fcntl( STDIN_FILENO, F_SETFL, flags );
-#endif
-                    // On Windows, arrow/function keys are already swallowed
-                    // by readInteractiveByte(), so a lone ESC here is just
-                    // the Escape key itself; nothing more to discard.
                 }
                 else if( (unsigned char)c >= 32 && (unsigned char)c < 127 )
                 {
