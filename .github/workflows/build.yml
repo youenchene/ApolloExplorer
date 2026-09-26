@@ -63,10 +63,11 @@ jobs:
           mv ash/ash ApolloExplorer-macOS/
           ditto -c -k --sequesterRsrc --keepParent ApolloExplorer-macOS ApolloExplorer-macOS-universal.zip
 
-      - uses: actions/upload-artifact@v4
+      # archive: false => the download is this zip itself, not a zip wrapping it.
+      - uses: actions/upload-artifact@v7
         with:
-          name: ApolloExplorer-macOS-universal
           path: ApolloExplorer-macOS-universal.zip
+          archive: false
 
   linux:
     name: Linux (x86_64)
@@ -99,10 +100,11 @@ jobs:
           mv ash/ash ApolloExplorer-Linux/ash
           tar -czf ApolloExplorer-Linux-x86_64.tar.gz ApolloExplorer-Linux
 
-      - uses: actions/upload-artifact@v4
+      # archive: false => the download is the tar.gz itself (keeps exec bits).
+      - uses: actions/upload-artifact@v7
         with:
-          name: ApolloExplorer-Linux-x86_64
           path: ApolloExplorer-Linux-x86_64.tar.gz
+          archive: false
 
   windows:
     name: Windows (x86_64)
@@ -144,12 +146,18 @@ jobs:
           New-Item -ItemType Directory -Force -Path ApolloExplorer-Windows
           Move-Item ApolloExplorerPC\release\ApolloExplorer.exe ApolloExplorer-Windows\ApolloExplorer.exe
           Move-Item acp\release\acp.exe ApolloExplorer-Windows\acp.exe
-          Compress-Archive -Path ApolloExplorer-Windows\* -DestinationPath ApolloExplorer-Windows-x86_64.zip
+          # Bundle the Qt DLLs, plugins and MSVC runtime next to the exes; the
+          # .pro files' post-link windeployqt only fills release\, not this folder.
+          windeployqt --release --compiler-runtime ApolloExplorer-Windows\ApolloExplorer.exe
+          windeployqt --release --compiler-runtime ApolloExplorer-Windows\acp.exe
+          # Zip the folder itself so it unzips to ApolloExplorer-Windows\.
+          Compress-Archive -Path ApolloExplorer-Windows -DestinationPath ApolloExplorer-Windows-x86_64.zip
 
-      - uses: actions/upload-artifact@v4
+      # archive: false => the download is this zip itself, not a zip wrapping it.
+      - uses: actions/upload-artifact@v7
         with:
-          name: ApolloExplorer-Windows-x86_64
           path: ApolloExplorer-Windows-x86_64.zip
+          archive: false
 
   amiga:
     name: Amiga server (m68k, experimental)
@@ -211,19 +219,20 @@ jobs:
 
       - name: Package
         run: |
-          # Staged under package/ so the artifact zip unpacks straight to an
-          # ApolloExplorer-Amiga/ folder (no nested archive).
-          mkdir -p package/ApolloExplorer-Amiga
-          mv Amiga/ApolloExplorerSrv package/ApolloExplorer-Amiga/
-          mv Amiga/ApolloExplorerTool package/ApolloExplorer-Amiga/
+          mkdir -p ApolloExplorer-Amiga
+          mv Amiga/ApolloExplorerSrv ApolloExplorer-Amiga/
+          mv Amiga/ApolloExplorerTool ApolloExplorer-Amiga/
           # Workbench icons + the AEKill IconX script (runs `ApolloExplorerTool kill`),
           # same set as the upstream release's "Amiga Server" folder.
-          cp Amiga/dist/ApolloExplorerSrv.info Amiga/dist/AEKill Amiga/dist/AEKill.info package/ApolloExplorer-Amiga/
+          cp Amiga/dist/ApolloExplorerSrv.info Amiga/dist/AEKill Amiga/dist/AEKill.info ApolloExplorer-Amiga/
+          # Unzips to an ApolloExplorer-Amiga/ folder.
+          zip -r ApolloExplorer-Amiga-m68k.zip ApolloExplorer-Amiga
 
-      - uses: actions/upload-artifact@v4
+      # archive: false => the download is this zip itself, not a zip wrapping it.
+      - uses: actions/upload-artifact@v7
         with:
-          name: ApolloExplorer-Amiga-m68k
-          path: package/
+          path: ApolloExplorer-Amiga-m68k.zip
+          archive: false
 
   release:
     name: Attach artifacts to release
@@ -233,18 +242,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      # v8 is required to download artifacts uploaded with `archive: false`.
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
+          merge-multiple: true
 
-      - name: Zip the Amiga folder for the release
-        # The Amiga artifact is a plain folder (not an archive); bundle it as a
-        # single zip so the release doesn't get five loose files.
-        run: |
-          cd artifacts/ApolloExplorer-Amiga-m68k
-          zip -r ../ApolloExplorer-Amiga-m68k.zip ApolloExplorer-Amiga
-          cd ..
-          rm -rf ApolloExplorer-Amiga-m68k
+      - run: ls -laR artifacts
 
       - uses: softprops/action-gh-release@v2
         with:
