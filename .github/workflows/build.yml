@@ -214,6 +214,9 @@ jobs:
           mkdir -p ApolloExplorer-Amiga
           mv Amiga/ApolloExplorerSrv ApolloExplorer-Amiga/
           mv Amiga/ApolloExplorerTool ApolloExplorer-Amiga/
+          # Workbench icons + the AEKill IconX script (runs `ApolloExplorerTool kill`),
+          # same set as the upstream release's "Amiga Server" folder.
+          cp Amiga/dist/ApolloExplorerSrv.info Amiga/dist/AEKill Amiga/dist/AEKill.info ApolloExplorer-Amiga/
           tar -czf ApolloExplorer-Amiga-m68k.tar.gz ApolloExplorer-Amiga
 
       - uses: actions/upload-artifact@v4
